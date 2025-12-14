@@ -1,0 +1,356 @@
+import yaml
+import threading
+import time
+from datetime import datetime
+import csv
+
+# ---------------- LOGGING ---------------- #
+log_lock = threading.Lock()
+
+def log(msg, logfile):
+    with log_lock:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logfile.write(f"{timestamp};{msg}\n")
+        logfile.flush()
+
+# ---------------- TASK FUNCTIONS ---------------- #
+
+def TimeFunction(seconds):
+    time.sleep(seconds)
+
+def DataLoad(filename):
+    with open(filename, newline='') as f:
+        reader = csv.reader(f)
+        data = list(reader)
+    return data
+
+# ---------------- TASK EXECUTOR ---------------- #
+
+def execute_task(task_name, task_def, logfile):
+    log(f"{task_name} Entry", logfile)
+
+    func_name = task_def.get("Function")
+    inputs = task_def.get("Inputs", {})
+
+    log(f"{task_name} Executing {func_name}({inputs})", logfile)
+
+    # Call function
+    if func_name == "TimeFunction":
+        TimeFunction(inputs.get("Seconds", 1))
+    elif func_name == "DataLoad":
+        DataLoad(inputs.get("Filename"))
+
+    log(f"{task_name} Exit", logfile)
+
+# ---------------- FLOW EXECUTOR ---------------- #
+
+def execute_flow(flow_name, flow_def, workflow, logfile):
+    execution_type = flow_def.get("Execution", "Sequential")
+    activities = flow_def.get("Activities", [])
+
+    if execution_type == "Sequential":
+        for act in activities:
+            execute_activity(act, workflow, logfile)
+
+    elif execution_type == "Concurrent":
+        threads = []
+        for act in activities:
+            t = threading.Thread(
+                target=execute_activity,
+                args=(act, workflow, logfile)
+            )
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+# ---------------- ACTIVITY ROUTER ---------------- #
+
+def execute_activity(name, workflow, logfile):
+    definition = workflow[name]
+
+    if definition["Type"] == "Task":
+        execute_task(name, definition, logfile)
+    elif definition["Type"] == "Flow":
+        execute_flow(name, definition, workflow, logfile)
+
+# ---------------- MAIN ---------------- #
+
+def main():
+    with open("workflow.yaml") as f:
+        workflow = yaml.safe_load(f)
+
+    with open("Milestone1.txt", "w") as logfile:
+        start_flow = workflow["StartFlow"]
+        execute_flow("StartFlow", start_flow, workflow, logfile)
+
+if __name__ == "__main__":
+    main()  explain this flow with eg stepwise
+
+
+
+
+
+import yaml
+import threading
+import time
+import csv
+import re
+from datetime import datetime
+
+# ---------------- GLOBAL CONTEXT ---------------- #
+context = {}
+context_lock = threading.Lock()
+
+# ---------------- LOGGING ---------------- #
+log_lock = threading.Lock()
+
+def log(msg, logfile):
+    with log_lock:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logfile.write(f"{ts};{msg}\n")
+        logfile.flush()
+
+# ---------------- TASK FUNCTIONS ---------------- #
+
+def TimeFunction(seconds):
+    time.sleep(int(seconds))
+    return {"SleptSeconds": seconds}
+
+def DataLoad(filename):
+    with open(filename, newline='') as f:
+        reader = csv.reader(f)
+        data = list(reader)
+    return {"NoOfRows": len(data)}
+
+# ---------------- VARIABLE RESOLUTION ---------------- #
+
+def resolve_value(value):
+    """
+    Replaces $(Task.Output) with actual values from context
+    """
+    if isinstance(value, str):
+        matches = re.findall(r"\$\((.*?)\)", value)
+        for m in matches:
+            task, var = m.split(".")
+            value = value.replace(f"$({m})", str(context[task][var]))
+    return value
+
+# ---------------- CONDITION EVALUATION ---------------- #
+
+def evaluate_condition(condition):
+    """
+    Example: $(LoadData.NoOfRows) > 5
+    """
+    expr = resolve_value(condition)
+    return eval(expr)
+
+# ---------------- TASK EXECUTOR ---------------- #
+
+def execute_task(task_name, task_def, logfile):
+    log(f"{task_name} Entry", logfile)
+
+    # Check condition
+    condition = task_def.get("Condition")
+    if condition:
+        if not evaluate_condition(condition):
+            log(f"{task_name} Skipped", logfile)
+            log(f"{task_name} Exit", logfile)
+            return
+
+    func_name = task_def.get("Function")
+    inputs = task_def.get("Inputs", {})
+
+    # Resolve input values
+    resolved_inputs = {
+        k: resolve_value(v) for k, v in inputs.items()
+    }
+
+    log(f"{task_name} Executing {func_name}({resolved_inputs})", logfile)
+
+    # Execute function
+    if func_name == "TimeFunction":
+        output = TimeFunction(**resolved_inputs)
+    elif func_name == "DataLoad":
+        output = DataLoad(**resolved_inputs)
+    else:
+        output = {}
+
+    # Store output in context
+    with context_lock:
+        context[task_name] = output
+
+    log(f"{task_name} Exit", logfile)
+
+# ---------------- FLOW EXECUTOR ---------------- #
+
+def execute_flow(flow_name, flow_def, workflow, logfile):
+    execution = flow_def.get("Execution", "Sequential")
+    activities = flow_def.get("Activities", [])
+
+    if execution == "Sequential":
+        for act in activities:
+            execute_activity(act, workflow, logfile)
+
+    elif execution == "Concurrent":
+        threads = []
+        for act in activities:
+            t = threading.Thread(
+                target=execute_activity,
+                args=(act, workflow, logfile)
+            )
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+# ---------------- ACTIVITY ROUTER ---------------- #
+
+def execute_activity(name, workflow, logfile):
+    definition = workflow[name]
+
+    if definition["Type"] == "Task":
+        execute_task(name, definition, logfile)
+    elif definition["Type"] == "Flow":
+        execute_flow(name, definition, workflow, logfile)
+
+# ---------------- MAIN ---------------- #
+
+def main():
+    with open("workflow.yaml") as f:
+        workflow = yaml.safe_load(f)
+
+    with open("Milestone2.txt", "w") as logfile:
+        start_flow = workflow["StartFlow"]
+        execute_flow("StartFlow", start_flow, workflow, logfile)
+
+if __name__ == "__main__":
+    main()
+
+
+import yaml
+import threading
+import time
+import csv
+import re
+from datetime import datetime
+
+# ---------------- GLOBAL CONTEXT ---------------- #
+context = {}
+context_lock = threading.Lock()
+
+# ---------------- LOGGING ---------------- #
+log_lock = threading.Lock()
+
+def log(msg, logfile):
+    with log_lock:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logfile.write(f"{ts};{msg}\n")
+        logfile.flush()
+
+# ---------------- TASK FUNCTIONS ---------------- #
+
+def TimeFunction(seconds):
+    time.sleep(int(seconds))
+    return {"SleptSeconds": seconds}
+
+def DataLoad(filename):
+    with open(filename, newline='') as f:
+        reader = csv.reader(f)
+        data = list(reader)
+    return {"NoOfRows": len(data)}
+
+def FailingFunction():
+    raise Exception("Intentional Failure")
+
+# ---------------- VARIABLE RESOLUTION ---------------- #
+
+def resolve_value(value):
+    if isinstance(value, str):
+        matches = re.findall(r"\$\((.*?)\)", value)
+        for m in matches:
+            task, var = m.split(".")
+            value = value.replace(f"$({m})", str(context[task][var]))
+    return value
+
+# ---------------- TASK EXECUTOR ---------------- #
+
+def execute_task(task_name, task_def, logfile):
+    retries = task_def.get("Retry", 0)
+    attempts = 0
+
+    while True:
+        try:
+            log(f"{task_name} Entry", logfile)
+
+            func_name = task_def.get("Function")
+            inputs = task_def.get("Inputs", {})
+
+            resolved_inputs = {
+                k: resolve_value(v) for k, v in inputs.items()
+            }
+
+            log(f"{task_name} Executing {func_name}({resolved_inputs})", logfile)
+
+            if func_name == "TimeFunction":
+                output = TimeFunction(**resolved_inputs)
+            elif func_name == "DataLoad":
+                output = DataLoad(**resolved_inputs)
+            elif func_name == "FailingFunction":
+                output = FailingFunction()
+            else:
+                output = {}
+
+            with context_lock:
+                context[task_name] = output
+
+            log(f"{task_name} Exit", logfile)
+            return True
+
+        except Exception as e:
+            attempts += 1
+            log(f"{task_name} Failed Attempt {attempts}", logfile)
+
+            if attempts > retries:
+                log(f"{task_name} Exit Failed", logfile)
+                return False
+
+            log(f"{task_name} Retrying", logfile)
+
+# ---------------- FLOW EXECUTOR ---------------- #
+
+def execute_flow(flow_name, flow_def, workflow, logfile):
+    on_failure = flow_def.get("OnFailure", "Fail")
+    activities = flow_def.get("Activities", [])
+
+    for act in activities:
+        success = execute_activity(act, workflow, logfile)
+        if not success and on_failure == "Fail":
+            log(f"{flow_name} Stopped Due To Failure", logfile)
+            return False
+    return True
+
+# ---------------- ACTIVITY ROUTER ---------------- #
+
+def execute_activity(name, workflow, logfile):
+    definition = workflow[name]
+
+    if definition["Type"] == "Task":
+        return execute_task(name, definition, logfile)
+
+    elif definition["Type"] == "Flow":
+        return execute_flow(name, definition, workflow, logfile)
+
+# ---------------- MAIN ---------------- #
+
+def main():
+    with open("workflow.yaml") as f:
+        workflow = yaml.safe_load(f)
+
+    with open("Milestone3.txt", "w") as logfile:
+        execute_flow("StartFlow", workflow["StartFlow"], workflow, logfile)
+
+if __name__ == "__main__":
+    main()

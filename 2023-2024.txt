@@ -1,0 +1,34 @@
+import math
+
+def milestone1(wafer_diameter, N, angle_deg):
+    radius = wafer_diameter / 2
+    theta = math.radians(angle_deg)
+    step = radius / (N - 1)
+
+    points = []
+    for i in range(N):
+        r = i * step
+        x = r * math.cos(theta)
+        y = r * math.sin(theta)
+        points.append((round(x, 4), round(y, 4)))
+
+    return points
+
+def milestone2(wafer_diameter, die_width, die_height, die_shift_x, die_shift_y,
+               ref_x, ref_y, max_row, max_col):
+    
+    radius = wafer_diameter / 2
+    dies = {}
+
+    for row in range(-max_row, max_row+1):
+        for col in range(-max_col, max_col+1):
+            llc_x = ref_x + col * die_width + die_shift_x
+            llc_y = ref_y + row * die_height + die_shift_y
+
+            # Optional: only include dies inside wafer
+            center_x = llc_x + die_width / 2
+            center_y = llc_y + die_height / 2
+            if center_x**2 + center_y**2 <= radius**2:
+                dies[(row, col)] = (round(llc_x,4), round(llc_y,4))
+
+    return dies

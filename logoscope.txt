@@ -1,0 +1,194 @@
+def apply_replace_commands(log_lines, commands):
+    for cmd in commands:
+        if cmd.startswith("REPLACE"):
+            parts = cmd.strip().split(" ", 2)
+            line_number = int(parts[1]) - 1  # Convert to 0-based index
+            new_log_content = parts[2].strip('"')
+
+            if 0 <= line_number < len(log_lines):
+                original_line = log_lines[line_number]
+
+                # Find the prefix before " - "
+                if " - " in original_line:
+                    prefix = original_line.split(" - ")[0]
+                    log_lines[line_number] = f"{prefix} - {new_log_content.split(' - ')[1]}"
+                    
+                    # Also update the log level (INFO/ERROR/etc.)
+                    new_level = new_log_content.split(' - ')[0]
+                    if "]" in prefix:
+                        timestamp_part = prefix.split("]")[0] + "]"
+                        log_lines[line_number] = f"{timestamp_part} {new_level} - {new_log_content.split(' - ')[1]}"
+    return log_lines
+
+def count_log_levels(log_lines):
+    counts = {"INFO": 0, "ERROR": 0, "WARN": 0}
+    for line in log_lines:
+        if "INFO" in line:
+            counts["INFO"] += 1
+        if "ERROR" in line:
+            counts["ERROR"] += 1
+        if "WARN" in line or "WARNING" in line:
+            counts["WARN"] += 1
+    return counts
+
+# Step 1: Read input files
+with open("C:/Users/R.S.Karnikka/Desktop/KLA Unhack/Milestone1/M1_LogFile.txt", "r") as lf:
+    logs = [line.strip() for line in lf.readlines()]
+
+with open("C:/Users/R.S.Karnikka/Desktop/KLA Unhack/Milestone1/M1_CommandFile.txt", "r") as cf:
+    commands = [line.strip() for line in cf.readlines()]
+
+# Step 2: Apply replacements
+processed_logs = apply_replace_commands(logs, commands)
+
+# Step 3: Write M1_ProcessedLogFile.txt
+with open("M1_ProcessedLogFile.txt", "w") as out:
+    out.write("\n".join(processed_logs))
+
+# Step 4: Count and write M1_Output.txt
+counts = count_log_levels(processed_logs)
+with open("M1_Output.txt", "w") as out:
+    out.write(f"INFO: {counts['INFO']}\n")
+    out.write(f"ERROR: {counts['ERROR']}\n")
+    out.write(f"WARN: {counts['WARN']}\n")
+
+
+------------------------------------------------------
+import sys
+from datetime import datetime
+
+def parse_timestamp(line):
+    try:
+        # Extract timestamp inside square brackets
+        timestamp_str = line.split("]")[0].lstrip("[")
+        return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
+
+def apply_commands(log_lines, command_lines):
+    for cmd in command_lines:
+        if cmd.startswith("INSERT"):
+            line_to_insert = cmd.split("INSERT ", 1)[1].strip().strip('"')
+            log_lines.append(line_to_insert)
+        elif cmd.startswith("DELETE"):
+            parts = cmd.strip().split()
+            index_to_delete = int(parts[1]) - 1
+            if 0 <= index_to_delete < len(log_lines):
+                del log_lines[index_to_delete]
+
+    
+    valid_logs = []
+    for line in log_lines:
+        ts = parse_timestamp(line)
+        if ts:
+            valid_logs.append(line)
+
+    log_lines = valid_logs
+
+    log_lines.sort(key=parse_timestamp)
+    return log_lines
+
+def count_user_logins(log_lines):
+    user_counts = {}
+    for line in log_lines:
+        if "INFO" in line and "logged in from IP" in line:
+            try:
+                start = line.index("User '") + 6
+                end = line.index("'", start)
+                user = line[start:end]
+                user_counts[user] = user_counts.get(user, 0) + 1
+            except:
+                continue
+    return user_counts
+
+def main():
+    if len(sys.argv) != 5:
+        print("Usage: python m2_cla.py <log_file> <command_file> <output_log_file> <summary_file>")
+        return
+
+    log_file = sys.argv[1]
+    command_file = sys.argv[2]
+    processed_file = sys.argv[3]
+    output_file = sys.argv[4]
+
+    #Read log file
+    with open(log_file, "r") as f:
+        log_lines = [line.strip() for line in f.readlines() if line.strip()]
+
+    #Read command file
+    with open(command_file, "r") as f:
+        command_lines = [line.strip() for line in f.readlines() if line.strip()]
+
+    #Apply commands and sort
+    processed_logs = apply_commands(log_lines, command_lines)
+
+    #Write cleaned log
+    with open(processed_file, "w") as f:
+        f.write("\n".join(processed_logs))
+
+    #Count logins
+    user_counts = count_user_logins(processed_logs)
+
+
+    with open(output_file, "w") as f:
+        f.write("User Login Counts:\n")
+        for user, count in sorted(user_counts.items()):
+            f.write(f"{user}: {count}\n")
+
+if __name__ == "__main__":
+    main()
+-------------------------------------------------
+import sys
+import difflib
+
+def read_file(filename):
+    with open(filename, 'r') as f:
+        return [line.strip() for line in f.readlines()]
+
+def generate_diff_commands(file1_lines, file2_lines):
+    commands = []
+    matcher = difflib.SequenceMatcher(None, file1_lines, file2_lines)
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'replace':
+            # Delete original lines
+            for i in range(i2 - i1):
+                commands.append(f'DELETE {i1 + 1}')
+            # Insert new lines
+            for line in file2_lines[j1:j2]:
+                commands.append(f'INSERT "{line}"')
+
+        elif tag == 'delete':
+            for i in range(i1, i2):
+                commands.append(f'DELETE {i + 1}')
+
+        elif tag == 'insert':
+            for line in file2_lines[j1:j2]:
+                commands.append(f'INSERT "{line}"')
+
+        # 'equal' means no change, so skip
+
+    return commands
+
+def main():
+    if len(sys.argv) != 4:
+        print("Usage: python m3_cla.py M3_LogFile1.txt M3_LogFile2.txt M3_Output.txt")
+        return
+
+    file1 = sys.argv[1]
+    file2 = sys.argv[2]
+    output_file = sys.argv[3]
+
+    file1_lines = read_file(file1)
+    file2_lines = read_file(file2)
+
+    commands = generate_diff_commands(file1_lines, file2_lines)
+
+    with open(output_file, 'w') as f:
+        for cmd in commands:
+            f.write(cmd + '\n')
+
+
+
+if __name__ == "__main__":
+    main()
