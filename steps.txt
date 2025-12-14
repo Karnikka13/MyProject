@@ -46,3 +46,9 @@ To https://github.com/Karnikka13/MyProject.git
  * [new branch]      HEAD -> master
 branch 'master' set up to track 'origin/master'.
 ✓ Pushed commits to https://github.com/Karnikka13/MyProject.git
+
+
+
+git add .
+git commit -m "Your message"
+git push
