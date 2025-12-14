@@ -1,0 +1,264 @@
+import pandas as pd
+
+def read_file(filepath):
+    mat=[]
+    with open(filepath) as f:
+        lines=f.readlines()
+        for line in lines:
+            if "BAD_DIE:" in line:
+                no_bad=line.strip().replace("BAD_DIE:", "").strip()
+            if "GOOD_DIE:" in line:
+                no_good=line.strip().replace("GOOD_DIE:", "").strip()
+            if "ORIENTATION:" in line:
+                orientation = int(line.strip().replace("ORIENTATION:", "").strip())
+        for line in lines:
+            if line.startswith("ROWDATA:"):
+                p=line.strip().split("ROWDATA:")[1].strip().split()
+                mat.append(p)
+    return mat,orientation,no_bad,no_good
+
+def rotate(matrix,deg):
+    if deg==90:
+       
+        return [list(col) for col in zip(*matrix)][::-1]
+    elif deg==180:
+        return [row[::-1] for row in matrix[::-1]]
+    elif deg==270:
+       
+        return [list(reversed(col)) for col in zip(*matrix)]
+    else:
+        return matrix
+   
+def find(mat,matrix):
+    for i in range(len(mat)):
+        for j in range(len(mat[0])):
+            if matrix[i][j]==0:
+                mat[i][j]="000"
+    return mat
+
+def count_fun(mat,no_bad,no_good):
+    b,g=0,0
+    res=[]
+    for i in range(len(mat)):
+        for j in range(len(mat[0])):
+            if mat[i][j]==no_bad:
+                b+=1
+            elif mat[i][j]==no_good:
+                g+=1
+    res.extend([b,g])
+    return res
+
+def main():
+    ip_path="C:/Users/R.S.Karnikka/OneDrive/Desktop/KLA Unhack/CIT/M1/T1/INPUT.TXT"
+    matrix_path="C:/Users/R.S.Karnikka/OneDrive/Desktop/KLA Unhack/CIT/M1/T1/MATRIX.csv"
+    op_path="C:/Users/R.S.Karnikka/OneDrive/Desktop/KLA Unhack/CIT/M1/T1/M1T1.txt"
+
+    mat,orientation,no_bad,no_good=read_file(ip_path)
+   
+    df=pd.read_csv(matrix_path, header=None)
+    matrix=df.astype(int).values.tolist()
+
+    mat=rotate(mat,orientation)
+   
+    mat=find(mat,matrix)
+    bad,good=count_fun(mat,no_bad,no_good)
+
+    with open(op_path, "w") as op:
+        op.write("No of Good Dies:"+str(good)+"\n")
+        op.write("No of Bad Dies:"+str(bad))
+        for row in mat:
+            op.write("\n"+"ROWDATA:"+' '.join(row))
+
+main()
+
+'''import math
+import pandas as pd
+
+# -------------------------------------------------
+# Read Ink File
+# -------------------------------------------------
+def read_ink_file(path):
+    mat = []
+    params = {}
+
+    with open(path) as f:
+        lines = f.readlines()
+
+    for line in lines:
+        line = line.strip()
+        if ":" in line and not line.startswith("ROWDATA"):
+            k, v = line.split(":", 1)
+            params[k.strip()] = v.strip()
+
+    for line in lines:
+        if line.startswith("ROWDATA"):
+            mat.append(line.split("ROWDATA:")[1].strip().split())
+
+    return mat, params
+
+
+# -------------------------------------------------
+# Rotate Matrix
+# -------------------------------------------------
+def rotate(mat, deg):
+    if deg == 90:
+        return [list(col) for col in zip(*mat)][::-1]
+    elif deg == 180:
+        return [row[::-1] for row in mat[::-1]]
+    elif deg == 270:
+        return [list(reversed(col)) for col in zip(*mat)]
+    return mat
+
+
+# -------------------------------------------------
+# Apply Mask (Invalid Dies)
+# -------------------------------------------------
+def apply_mask(mat, mask):
+    for i in range(len(mat)):
+        for j in range(len(mat[0])):
+            if mask[i][j] == 0:
+                mat[i][j] = "000"
+    return mat
+
+
+# -------------------------------------------------
+# Normalize Die Values
+# -------------------------------------------------
+def normalize(mat, good, active_bad, inactive_bad):
+    for i in range(len(mat)):
+        for j in range(len(mat[0])):
+            if mat[i][j] == good:
+                mat[i][j] = "00G"
+            elif mat[i][j] == active_bad:
+                mat[i][j] = "A_B"   # temp marker
+            elif mat[i][j] == inactive_bad:
+                mat[i][j] = "00B"
+    return mat
+
+
+# -------------------------------------------------
+# Contamination Logic (ONLY ACTIVE BAD)
+# -------------------------------------------------
+def contaminate(mat, dist, die_size):
+    rows, cols = len(mat), len(mat[0])
+    d = math.ceil(dist / die_size)
+
+    for i in range(rows):
+        for j in range(cols):
+            if mat[i][j] == "A_B":
+                for x in range(max(0, i-d), min(rows, i+d+1)):
+                    for y in range(max(0, j-d), min(cols, j+d+1)):
+                        if mat[x][y] == "00G":
+                            mat[x][y] = "00C"
+
+    # convert active bad marker
+    for i in range(rows):
+        for j in range(cols):
+            if mat[i][j] == "A_B":
+                mat[i][j] = "00B"
+
+    return mat
+
+
+# -------------------------------------------------
+# Count Dies
+# -------------------------------------------------
+def count_dies(mat):
+    good = bad = cont = 0
+    for row in mat:
+        for d in row:
+            if d == "00G":
+                good += 1
+            elif d == "00B":
+                bad += 1
+            elif d == "00C":
+                cont += 1
+    return good, bad, cont
+
+
+# -------------------------------------------------
+# MAIN
+# -------------------------------------------------
+def main():
+    ink_path = "INPUT.TXT"
+    mask_path = "MATRIX.csv"
+    out_path = "M2T2.txt"
+
+    mat, p = read_ink_file(ink_path)
+
+    # parameters
+    orientation = int(p["ORIENTATION"])
+    good = p["GOOD_DIE"]
+    active_bad = p["ACTIVE_BAD_DIE"]
+    inactive_bad = p["INACTIVE_BAD_DIE"]
+    die_size = int(p["DIESIZE"].split(",")[0])
+    distance = int(p["DISTANCE"])
+
+    # read mask
+    mask = pd.read_csv(mask_path, header=None).astype(int).values.tolist()
+
+    # process
+    mat = rotate(mat, orientation)
+    mat = apply_mask(mat, mask)
+    mat = normalize(mat, good, active_bad, inactive_bad)
+    mat = contaminate(mat, distance, die_size)
+
+    # count
+    g, b, c = count_dies(mat)
+
+    # write output
+    with open(out_path, "w") as f:
+        f.write(f"NO OF GOOD DIES:{g}\n")
+        f.write(f"NO OF BAD DIES:{b}\n")
+        f.write(f"NO OF CONTAMINATED DIES:{c}\n")
+        for row in mat:
+            f.write("ROWDATA:" + " ".join(row) + "\n")
+
+    print("Output generated:", out_path)
+
+
+# -------------------------------------------------
+main()
+'''
+
+
+'''def find_bad_clusters(mat):
+    rows, cols = len(mat), len(mat[0])
+    visited = [[False]*cols for _ in range(rows)]
+
+    # 4-direction connectivity
+    directions = [
+        (-1, 0),  # up
+        (1, 0),   # down
+        (0, -1),  # left
+        (0, 1)    # right
+    ]
+
+    def dfs(r, c):
+        stack = [(r, c)]
+        visited[r][c] = True
+        size = 1
+
+        while stack:
+            x, y = stack.pop()
+            for dx, dy in directions:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < rows and 0 <= ny < cols:
+                    if not visited[nx][ny] and mat[nx][ny] in ("00B", "00C"):
+                        visited[nx][ny] = True
+                        stack.append((nx, ny))
+                        size += 1
+        return size
+
+    cluster_count = 0
+    largest_cluster = 0
+
+    for i in range(rows):
+        for j in range(cols):
+            if mat[i][j] in ("00B", "00C") and not visited[i][j]:
+                cluster_count += 1
+                cluster_size = dfs(i, j)
+                largest_cluster = max(largest_cluster, cluster_size)
+
+    return cluster_count, largest_cluster
+'''
